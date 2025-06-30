@@ -1,0 +1,7 @@
+adapter_alpha: 0.1
+weight_loss_ECR: 200.0
+augment_coef: 0.0
+lambda_doc: 1.0
+epochs: 500
+learning_rate: 0.002
+batch_size: 200
