@@ -10,14 +10,14 @@ from utils.file_utils import update_args
 import logging
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 parser = argparse.ArgumentParser(description="LLM evaluation")
 parser.add_argument("-d", "--dataset_name", type=str, default="20NG")
 parser.add_argument("-n", "--num_topics", type=int, default=50)
 parser.add_argument("-c", "--config")
+parser.add_argument("-s", "--subdoc_type", type=str, default="sub_span")
 args = parser.parse_args()
 
 dataset = args.dataset_name
