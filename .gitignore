@@ -2,7 +2,8 @@ __pycache__/
 venv
 outputs/
 .env
-tm_datasets/
+datasets/
 outputs/
 llm_eval_results/
 env/
+evaluations/wikipedia_bd*
