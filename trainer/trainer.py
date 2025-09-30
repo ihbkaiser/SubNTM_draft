@@ -87,7 +87,7 @@ class BasicTrainer:
                 print(msg)
                 self.logger.info(msg)
             
-            if epoch % 10 == 0:
+            if epoch % self.log_interval == 0:
                 train_t, test_t = self.export_theta(ds)
                 clus = evaluate_clustering(test_t, ds.y_test)
                 self.logger.info(f"Clustering result: {clus}")
