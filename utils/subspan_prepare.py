@@ -1,16 +1,9 @@
-#!/usr/bin/env python3
 import os
 import argparse
 import numpy as np
 from gensim.utils import simple_preprocess
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch
-import torch.nn.functional as F
-
-
-def get_optimal_device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def mean_pooling(model_output, attention_mask):
@@ -36,13 +29,7 @@ def generate_sliding_windows(tokens, window_size, stride):
     return segments
 
 
-def build_fixed_subdocs(
-    texts,  # List[str]
-    vocab,  # List[str]
-    window_size,
-    stride,
-    batch_size,
-):
+def build_subspan(docs, vocab, window_size, stride):  # List[str]  # List[str]
     # prepare vocab→idx
     V = len(vocab)
     w2i = {w: i for i, w in enumerate(vocab)}
@@ -52,7 +39,7 @@ def build_fixed_subdocs(
     segments_per_doc = []
 
     # 1) tokenize & segment + build raw bows
-    for doc in tqdm(texts, desc="Segmenting docs"):
+    for doc in tqdm(docs, desc="Segmenting docs"):
         tokens = simple_preprocess(doc)
         segs = generate_sliding_windows(tokens, window_size, stride)
         segments_per_doc.append(len(segs))
@@ -68,7 +55,7 @@ def build_fixed_subdocs(
 
     # 2) pad to fixed Q_max
     Q_max = max(segments_per_doc)
-    N = len(texts)
+    N = len(docs)
     bow_tensor = np.zeros((N, Q_max, V), dtype=np.float32)
 
     idx = 0
@@ -84,11 +71,10 @@ def main():
     parser.add_argument("-d", "--dataset_name", type=str, default="20NG")
     parser.add_argument("-w", "--window_size", type=int, default=40)
     parser.add_argument("-s", "--stride", type=int, default=30)
-    parser.add_argument("-b", "--batch_size", type=int, default=32)
     args = parser.parse_args()
 
     data_path = f"tm_datasets/{args.dataset_name}"
-    output_dir = f"tm_datasets/{args.datase_namet}/dynamic_subdoc"
+    output_dir = f"tm_datasets/{args.dataset_name}/sub_span"
 
     # prepare output
     os.makedirs(output_dir, exist_ok=True)
@@ -98,23 +84,11 @@ def main():
     vocab = open(os.path.join(data_path, "vocab.txt")).read().splitlines()
 
     # train
-    bow_tr = build_fixed_subdocs(
-        train_texts,
-        vocab,
-        args.window_size,
-        args.stride,
-        args.batch_size,
-    )
+    bow_tr = build_subspan(train_texts, vocab, args.window_size, args.stride)
     np.savez_compressed(os.path.join(output_dir, "train_sub.npz"), data=bow_tr)
 
     # test
-    bow_te = build_fixed_subdocs(
-        test_texts,
-        vocab,
-        args.window_size,
-        args.stride,
-        args.batch_size,
-    )
+    bow_te = build_subspan(test_texts, vocab, args.window_size, args.stride)
     np.savez_compressed(os.path.join(output_dir, "test_sub.npz"), data=bow_te)
     print(f"Saved .npz files to {output_dir}")
 
