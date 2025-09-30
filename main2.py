@@ -1,58 +1,70 @@
-from types import SimpleNamespace
-import numpy as np
-import torch
-from torch.utils.data import TensorDataset, DataLoader
+import argparse
+import os
+from dataset_handler.dataset_handler_2 import DatasetHandler
 from scipy import sparse
+from types import SimpleNamespace
+from models.SubNTM import SubNTM
+from trainer.trainer import BasicTrainer
+from utils.file_utils import update_args
 
+import logging
 
-class DatasetHandler:
-    """
-    Loads sparse .npz doc/train/test and sub-doc files and a vocab.txt,
-    converts to dense torch.Tensors, and prepares a DataLoader.
-    """
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
-    def __init__(self, data_path, batch_size, subdoc_type="sub_span"):
-        self.args = SimpleNamespace(data_path=data_path)
-        train_doc_path = f"{data_path}/train_bow.npz"
-        test_doc_path = f"{data_path}/test_bow.npz"
-        
-        if subdoc_type == "sub_span":
-            train_sub_path = f"{data_path}/dynamic_subdoc/train_sub.npz"
-            test_sub_path = f"{data_path}/dynamic_subdoc/test_sub.npz"
-        elif subdoc_type == "sub_sentence":
-            train_sub_path = f"{data_path}/sub_sentence/updated_train_subsent_1_4.npz"
-            test_sub_path = f"{data_path}/sub_sentence/updated_test_subsent_1_4.npz"
-        
-        vocab_path = f"{data_path}/vocab.txt"
+parser = argparse.ArgumentParser(description="LLM evaluation")
+parser.add_argument("-d", "--dataset_name", type=str, default="20NG")
+parser.add_argument("-n", "--num_topics", type=int, default=50)
+parser.add_argument("-c", "--config")
+parser.add_argument("-s", "--subdoc_type", type=str, default="sub_span")
+args = parser.parse_args()
 
-        # Load vocabulary
-        with open(vocab_path, "r", encoding="utf-8") as f:
-            self.vocab = [w.strip() for w in f if w.strip()]
+dataset = args.dataset_name
+num_topics = args.num_topics
 
-        # Load document-level sparse data
-        train_sp = sparse.load_npz(train_doc_path)
-        test_sp = sparse.load_npz(test_doc_path)
+dataset_path = f"tm_datasets/{dataset}"
+out_dir = f"outputs/{dataset}_{num_topics}"
 
-        train_sub_np = np.load(train_sub_path)["data"].astype(np.float32)
-        test_sub_np = np.load(test_sub_path)["data"].astype(np.float32)
+update_args(args, path=args.config)
 
-        # Convert docs to dense numpy → torch.Tensor
-        X_train = train_sp.toarray().astype(np.float32)
-        X_test = test_sp.toarray().astype(np.float32)
+os.makedirs(out_dir, exist_ok=True)
 
-        sub_train = torch.from_numpy(train_sub_np)  # [N_train, S, V]
-        sub_test = torch.from_numpy(test_sub_np)  # [N_train, S, V]
+ds = DatasetHandler(data_path=dataset_path, batch_size=200)
+vocab_size = len(ds.vocab)
+W_emb = (
+    sparse.load_npz(f"{dataset_path}/word_embeddings.npz").toarray().astype("float32")
+)
+arguments = SimpleNamespace(
+    vocab_size=vocab_size,
+    en1_units=200,
+    dropout=0.0,
+    embed_size=200,
+    num_topic=num_topics,
+    num_cluster=10,  # for DKM loss
+    adapter_alpha=args.adapter_alpha,
+    beta_temp=0.2,
+    tau=1.0,
+    weight_loss_ECR=args.weight_loss_ECR,
+    sinkhorn_alpha=20.0,
+    sinkhorn_max_iter=1000,
+    augment_coef=args.augment_coef,
+    data_path=dataset_path,
+    word_embeddings=W_emb,
+    lambda_doc=args.lambda_doc,
+)
+model = SubNTM(arguments)
+trainer = BasicTrainer(
+    model,
+    epochs=args.epochs,
+    learning_rate=args.learning_rate,
+    batch_size=args.batch_size,
+    lr_scheduler="StepLR",
+    lr_step_size=125,
+    log_interval=5,
+)
+tw, train_t = trainer.fit_transform(ds, num_top_words=15, verbose=True)
+trainer.save_beta(out_dir)
+trainer.save_theta(ds, out_dir)
 
-        # Store labels if available
-        self.y_train = np.loadtxt(f"{data_path}/train_labels.txt", dtype=int)
-        self.y_test = np.loadtxt(f"{data_path}/test_labels.txt", dtype=int)
-
-        # Torch tensors for docs
-        self.train_data = torch.from_numpy(X_train)
-        self.test_data = torch.from_numpy(X_test)
-
-        self.train_dataloader = DataLoader(
-            TensorDataset(self.train_data, sub_train),
-            batch_size=batch_size,
-            shuffle=True,
-        )
+print("Training complete. Outputs saved to:", out_dir)
