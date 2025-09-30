@@ -11,12 +11,18 @@ class DatasetHandler:
     converts to dense torch.Tensors, and prepares a DataLoader.
     """
 
-    def __init__(self, data_path, batch_size):
+    def __init__(self, data_path, batch_size, subdoc_type="sub_span"):
         self.args = SimpleNamespace(data_path=data_path)
         train_doc_path = f"{data_path}/train_bow.npz"
         test_doc_path = f"{data_path}/test_bow.npz"
-        train_sub_path = f"{data_path}/dynamic_subdoc/train_sub.npz"
-        test_sub_path = f"{data_path}/dynamic_subdoc/test_sub.npz"
+        
+        if subdoc_type == "sub_span":
+            train_sub_path = f"{data_path}/sub_span/train_sub.npz"
+            test_sub_path = f"{data_path}/sub_span/test_sub.npz"
+        elif subdoc_type == "sub_sentence":
+            train_sub_path = f"{data_path}/sub_sentence/train_sub.npz"
+            test_sub_path = f"{data_path}/sub_sentence/test_sub.npz"
+        
         vocab_path = f"{data_path}/vocab.txt"
 
         # Load vocabulary
